@@ -15,6 +15,13 @@ gateway:
     pullPolicy: IfNotPresent
   replicas: 1
   allowPrivateUpstreams: true  # lets an admin register e.g. http://10.x.x.x:... upstreams while developing
+  # Chat agent LLM. Any OpenAI-compatible /chat/completions endpoint works; the key comes from
+  # deploy/secrets/platform.yaml (llmApiKey). Free option used for the demo: NVIDIA's hosted
+  # Nemotron. Switch to provider: anthropic (+ anthropicApiKey) or provider: mock (no key) as needed.
+  llm:
+    provider: openai_compatible
+    model: nvidia/nemotron-3-super-120b-a12b   # nemotron-3-ultra-550b-a55b also works when NVIDIA is not overloaded (503)
+    baseUrl: https://integrate.api.nvidia.com/v1
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { cpu: "1", memory: 512Mi }

@@ -64,8 +64,10 @@ CLI tools work without touching the hosts file. Alternatives (offline machines, 
 blocked) are in [deploy/README.md](deploy/README.md): `store.localhost` works in browsers only, or add
 `127.0.0.1 store.local gateway.local` to the hosts file and set `DOMAIN=local`.
 
-To enable the chat agent, put an LLM key in `deploy/secrets/platform.yaml` (`anthropicApiKey`) and set
-`gateway.llm.provider: anthropic` in `charts/platform/values-local.yaml` (default model
+The chat agent is configured in `charts/platform/values-local.yaml` under `gateway.llm` and takes its key from
+`deploy/secrets/platform.yaml`. The committed local values use NVIDIA's free OpenAI-compatible endpoint
+(`provider: openai_compatible`, `baseUrl: https://integrate.api.nvidia.com/v1`, model `nvidia/nemotron-3-super-120b-a12b`;
+put the `nvapi-...` key in `llmApiKey`). For Anthropic instead, set `anthropicApiKey` and `gateway.llm.provider: anthropic` (default model
 `claude-opus-5-5`; `claude-haiku-5-5` is the cheap option). Any OpenAI-compatible endpoint works with
 `provider: openai_compatible` + `baseUrl` (Ollama, Groq, OpenRouter), and `provider: mock` demonstrates
 the tool loop without any key. Re-run `make deploy`.
