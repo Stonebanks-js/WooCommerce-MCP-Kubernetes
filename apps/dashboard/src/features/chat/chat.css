@@ -1,0 +1,27 @@
+.chat-page { display: flex; flex-direction: column; height: calc(100vh - var(--s3) - var(--s6)); min-height: 420px; }
+.chat-meta { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.chat-log {
+  flex: 1; min-height: 0; overflow-y: auto; padding: var(--s2);
+  border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-muted);
+  display: flex; flex-direction: column; gap: var(--s2); margin-top: var(--s2);
+}
+.chat-empty { margin: auto; text-align: center; }
+.turn { display: flex; flex-direction: column; gap: 6px; max-width: 760px; }
+.turn-user { align-self: flex-end; align-items: flex-end; }
+.turn-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-muted); }
+.turn-body { white-space: pre-wrap; overflow-wrap: anywhere; padding: var(--s1) 12px; border-radius: var(--radius-lg); background: var(--bg); border: 1px solid var(--border); }
+.turn-user .turn-body { background: var(--accent); color: #fff; border-color: var(--accent); }
+.cursor { display: inline-block; width: 7px; height: 14px; margin-left: 2px; vertical-align: -2px; background: var(--accent); animation: blink 1s steps(2) infinite; }
+@keyframes blink { to { opacity: 0; } }
+
+.tool-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); padding: var(--s1) 12px; display: flex; flex-direction: column; gap: 6px; }
+.tool-card-head { display: flex; align-items: center; gap: var(--s1); flex-wrap: wrap; }
+.tool-card-name { font-weight: 600; }
+.tool-card-args summary { cursor: pointer; font-size: 12px; color: var(--fg-muted); user-select: none; }
+.tool-card-args pre { margin-top: 6px; user-select: text; max-height: 240px; overflow: auto; }
+.tool-card-preview { font-family: var(--mono); font-size: 12px; line-height: 18px; color: var(--fg-muted); max-height: 160px; overflow: auto; border-top: 1px dashed var(--border); padding-top: 6px; }
+.tool-card-preview.is-error { color: var(--danger); }
+
+.chat-composer { display: flex; gap: var(--s1); align-items: flex-end; margin-top: var(--s2); }
+.chat-composer textarea { min-height: 56px; }
+.chat-composer .btn { height: 56px; padding: 0 var(--s3); }

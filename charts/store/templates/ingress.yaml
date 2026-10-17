@@ -1,0 +1,36 @@
+{{- /*
+Storefront Ingress: requirement "storefront exposed through Ingress with a stable URL".
+Only WordPress is published; woo-mcp has no Ingress rule anywhere (see woo-mcp-service.yaml).
+ingressClassName is `traefik` on both kind (installed by deploy/scripts/kind-up.sh) and k3s
+(bundled). Traefik needs no annotations for a plain HTTP site; `ingress.annotations` stays as a
+knob for cert-manager (cert-manager.io/cluster-issuer) or another controller.
+*/ -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "store.fullname" . }}-wordpress
+  labels:
+    {{- include "store.labels" (dict "root" . "component" "wordpress") | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.store.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "store.fullname" . }}-wordpress
+                port:
+                  name: http

@@ -1,0 +1,186 @@
+{{- /*
+NetworkPolicies for the store namespace (enforced by kindnet's kube-network-policies on kind and by
+the embedded kube-router controller on k3s; nothing extra to install).
+
+Model: default-deny for BOTH directions, then one allow policy per workload listing exactly the
+peers it needs. The requirement that matters most is the last policy: woo-mcp accepts ingress
+ONLY from pods labelled app.kubernetes.io/name=gateway in the namespace .Values.gateway.namespace
+(namespaceSelector AND podSelector in one `from` entry). Nothing else in or outside this namespace
+can open a connection to it, on top of it having no Ingress.
+
+Peers are selected with the app.kubernetes.io/name + app.kubernetes.io/instance pair from
+_helpers.tpl (contracts section 2). kubelet probes originate from the node and are not subject to
+these policies.
+*/ -}}
+{{- if .Values.networkPolicy.enabled }}
+{{- $np := .Values.networkPolicy }}
+{{- $dns := list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" "kube-system")) "podSelector" (dict "matchLabels" $np.dnsPodLabels)) }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "store.fullname" . }}-default-deny
+  labels:
+    {{- include "store.labels" (dict "root" . "component" "network") | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# Every pod may resolve names through CoreDNS in kube-system (udp+tcp 53). Nothing else is
+# allowed by default.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "store.fullname" . }}-allow-dns
+  labels:
+    {{- include "store.labels" (dict "root" . "component" "network") | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        {{- toYaml $dns | nindent 8 }}
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+---
+# WordPress: reachable on :80 from the ingress controller (the storefront), from woo-mcp (REST
+# calls) and from the setup Job (verification request). Egress: MariaDB, and the internet on 80/443
+# for plugin downloads / update checks / wp-cron loopback through the public ingress on a VPS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "store.fullname" . }}-wordpress
+  labels:
+    {{- include "store.labels" (dict "root" . "component" "network") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "store.selectorLabels" (dict "root" . "component" "wordpress") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.ingressControllerNamespace | quote }}
+        - podSelector:
+            matchLabels:
+              {{- include "store.selectorLabels" (dict "root" . "component" "woo-mcp") | nindent 14 }}
+        - podSelector:
+            matchLabels:
+              {{- include "store.selectorLabels" (dict "root" . "component" "setup") | nindent 14 }}
+      ports:
+        - { port: 80, protocol: TCP }
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "store.selectorLabels" (dict "root" . "component" "mariadb") | nindent 14 }}
+      ports:
+        - { port: 3306, protocol: TCP }
+    {{- if $np.internetEgress.enabled }}
+    - to:
+        {{- range $np.internetEgress.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - { port: 80, protocol: TCP }
+        - { port: 443, protocol: TCP }
+    {{- end }}
+---
+# MariaDB: only WordPress and the setup Job may connect on :3306; MariaDB itself talks to nobody.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "store.fullname" . }}-mariadb
+  labels:
+    {{- include "store.labels" (dict "root" . "component" "network") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "store.selectorLabels" (dict "root" . "component" "mariadb") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "store.selectorLabels" (dict "root" . "component" "wordpress") | nindent 14 }}
+        - podSelector:
+            matchLabels:
+              {{- include "store.selectorLabels" (dict "root" . "component" "setup") | nindent 14 }}
+      ports:
+        - { port: 3306, protocol: TCP }
+  egress: []
+---
+# Setup Job: MariaDB (wp db check, wp-cli), WordPress :80 (verification) and the internet on
+# 80/443 (WooCommerce plugin download from wordpress.org). Accepts no ingress at all.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "store.fullname" . }}-setup
+  labels:
+    {{- include "store.labels" (dict "root" . "component" "network") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "store.selectorLabels" (dict "root" . "component" "setup") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "store.selectorLabels" (dict "root" . "component" "mariadb") | nindent 14 }}
+      ports:
+        - { port: 3306, protocol: TCP }
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "store.selectorLabels" (dict "root" . "component" "wordpress") | nindent 14 }}
+      ports:
+        - { port: 80, protocol: TCP }
+    {{- if $np.internetEgress.enabled }}
+    - to:
+        {{- range $np.internetEgress.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - { port: 80, protocol: TCP }
+        - { port: 443, protocol: TCP }
+    {{- end }}
+---
+# woo-mcp: THE isolation rule of the assignment. Ingress on :8080 only from gateway pods
+# (app.kubernetes.io/name=gateway) living in namespace {{ .Values.gateway.namespace }}.
+# Both selectors sit in ONE `from` element, so they are AND-ed: a pod with the gateway label in
+# another namespace, or any other pod in the gateway namespace, is rejected. Egress only to
+# WordPress :80 (plus DNS from the allow-dns policy).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "store.fullname" . }}-woo-mcp
+  labels:
+    {{- include "store.labels" (dict "root" . "component" "network") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "store.selectorLabels" (dict "root" . "component" "woo-mcp") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.gateway.namespace | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: gateway
+      ports:
+        - { port: 8080, protocol: TCP }
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "store.selectorLabels" (dict "root" . "component" "wordpress") | nindent 14 }}
+      ports:
+        - { port: 80, protocol: TCP }
+{{- end }}

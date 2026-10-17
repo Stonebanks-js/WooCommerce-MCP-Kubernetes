@@ -1,0 +1,97 @@
+{{- /*
+WordPress (official apache image) as a single-replica Deployment on a ReadWriteOnce PVC.
+strategy: Recreate, because two pods cannot share an RWO volume and the old pod must release it
+before the new one starts (a RollingUpdate would deadlock on the claim).
+*/ -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "store.fullname" . }}-wordpress
+  labels:
+    {{- include "store.labels" (dict "root" . "component" "wordpress") | nindent 4 }}
+spec:
+  replicas: {{ .Values.wordpress.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "store.selectorLabels" (dict "root" . "component" "wordpress") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "store.labels" (dict "root" . "component" "wordpress") | nindent 8 }}
+      annotations:
+        # Restart the pod when the mu-plugin or the Secret changes.
+        checksum/mu-plugin: {{ include (print .Template.BasePath "/wordpress-configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print .Template.BasePath "/secrets.yaml") . | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      # securityContext EXCEPTION (documented in values.yaml): the official image's entrypoint
+      # starts as root to copy WordPress into the volume and write wp-config.php, then Apache's
+      # worker processes run as www-data (uid 33). runAsNonRoot would break the entrypoint, so the
+      # pod only sets fsGroup 33 (volume group-writable for www-data) and a default seccomp profile;
+      # the container drops every capability except the handful the entrypoint and Apache need
+      # (listed below), and forbids privilege escalation. Every other workload in this chart is
+      # fully non-root with a read-only root filesystem.
+      securityContext:
+        fsGroup: {{ .Values.wordpress.securityContext.fsGroup }}
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: wordpress
+          image: {{ include "store.image" (dict "image" .Values.wordpress.image "registry" .Values.global.imageRegistry) }}
+          imagePullPolicy: {{ .Values.wordpress.image.pullPolicy }}
+          env:
+            {{- include "store.wordpressEnv" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          # Probes target /wp-login.php, which answers 200 once installed and 302 (to
+          # wp-admin/install.php) before the setup Job ran; both count as success for httpGet.
+          # "/" is NOT probed: WordPress canonical-redirects it to the public host.
+          # Liveness is a TCP check so a MariaDB outage (which makes PHP return 500) does not get
+          # Apache restarted in a loop; readiness still drops the pod from the Service meanwhile.
+          startupProbe:
+            httpGet:
+              path: /wp-login.php
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /wp-login.php
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.wordpress.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              # CHOWN/FOWNER/DAC_OVERRIDE: the entrypoint untars WordPress into the volume with
+              # www-data ownership; SETUID/SETGID: Apache drops its workers to www-data; KILL: the
+              # root parent signals those www-data workers on reload/stop; NET_BIND_SERVICE: :80.
+              add: ["CHOWN", "FOWNER", "DAC_OVERRIDE", "SETGID", "SETUID", "KILL", "NET_BIND_SERVICE"]
+          volumeMounts:
+            - name: wordpress-data
+              mountPath: /var/www/html
+            - name: mu-plugin
+              mountPath: /var/www/html/wp-content/mu-plugins/urumi-platform.php
+              subPath: urumi-platform.php
+              readOnly: true
+      volumes:
+        - name: wordpress-data
+          persistentVolumeClaim:
+            claimName: {{ include "store.fullname" . }}-wordpress
+        - name: mu-plugin
+          configMap:
+            name: {{ include "store.fullname" . }}-wordpress-mu-plugin

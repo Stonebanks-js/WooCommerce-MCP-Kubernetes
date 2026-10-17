@@ -1,0 +1,20 @@
+{{- /*
+ClusterIP only: the gateway reaches woo-mcp at
+http://<release>-woo-mcp.<ns>.svc.cluster.local:8080/mcp (contracts section 2). There is
+deliberately no Ingress, NodePort or LoadBalancer for this Service anywhere in the chart.
+*/ -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "store.fullname" . }}-woo-mcp
+  labels:
+    {{- include "store.labels" (dict "root" . "component" "woo-mcp") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "store.selectorLabels" (dict "root" . "component" "woo-mcp") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP

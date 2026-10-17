@@ -1,0 +1,12 @@
+{{- /*
+"utils" upstream MCP server (X-Api-Key auth, so the gateway's "header" credential type is
+exercised). Same shared template as mcp-notes.
+*/ -}}
+{{- if .Values.mcpUtils.enabled }}
+{{- include "platform.mcpServer" (dict
+      "root" .
+      "name" "mcp-utils"
+      "server" "utils"
+      "values" .Values.mcpUtils
+      "token" (required "set secrets.utilsMcpToken (deploy/secrets/platform.yaml)" .Values.secrets.utilsMcpToken)) }}
+{{- end }}

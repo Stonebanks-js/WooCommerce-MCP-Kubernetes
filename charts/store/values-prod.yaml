@@ -1,0 +1,49 @@
+# Production-ish k3s VPS. Same chart as local; only hosts, ingress class/TLS, storage, images,
+# replicas and resources differ (contracts section 14).
+store:
+  host: store.example.com
+  scheme: http                 # becomes https automatically once ingress.tls is set
+
+wordpress:
+  persistence:
+    storageClass: local-path   # k3s built-in provisioner (PVs under /var/lib/rancher/k3s/storage)
+    size: 10Gi
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "2", memory: 1536Mi }
+
+mariadb:
+  persistence:
+    storageClass: local-path
+    size: 10Gi
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "2", memory: 2Gi }
+
+wooMcp:
+  image:
+    repository: registry.example.com/urumi/woo-mcp   # push with `make build` + docker push, or sideload
+    tag: "0.1.0"                                     # with deploy/scripts/k3s-load-images.sh
+    pullPolicy: IfNotPresent
+  replicas: 1
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: "1", memory: 512Mi }
+
+ingress:
+  className: traefik           # bundled with k3s (default IngressClass)
+  annotations: {}
+  # With cert-manager installed, uncomment to get a certificate from Let's Encrypt:
+  # annotations:
+  #   cert-manager.io/cluster-issuer: letsencrypt-prod
+  # tls:
+  #   - secretName: store-tls
+  #     hosts: [store.example.com]
+  tls: []
+
+networkPolicy:
+  enabled: true
+  ingressControllerNamespace: kube-system   # k3s runs Traefik in kube-system
+
+quota:
+  enabled: true

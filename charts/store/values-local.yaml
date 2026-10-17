@@ -1,0 +1,36 @@
+# Local kind cluster (make local-up). Only hosts, ingress class, storage, images, replicas and
+# resources differ from values.yaml, as required by contracts section 14.
+store:
+  host: store.127.0.0.1.nip.io
+  scheme: http
+
+wordpress:
+  persistence:
+    storageClass: standard     # kind's default (rancher local-path, WaitForFirstConsumer)
+    size: 2Gi
+  resources:
+    requests: { cpu: 50m, memory: 192Mi }
+    limits: { cpu: "1", memory: 512Mi }
+
+mariadb:
+  persistence:
+    storageClass: standard
+    size: 1Gi
+  resources:
+    requests: { cpu: 50m, memory: 192Mi }
+    limits: { cpu: "1", memory: 512Mi }
+
+wooMcp:
+  image:
+    repository: urumi/woo-mcp
+    tag: dev                   # built by `make build`, loaded with `make load` (never "latest")
+    pullPolicy: IfNotPresent   # the image is sideloaded into kind; a pull would fail
+
+ingress:
+  className: traefik           # installed into namespace "traefik" by deploy/scripts/kind-up.sh
+  annotations: {}
+  tls: []
+
+networkPolicy:
+  enabled: true
+  ingressControllerNamespace: traefik

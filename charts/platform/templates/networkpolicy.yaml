@@ -1,0 +1,172 @@
+{{- /*
+NetworkPolicies for the platform namespace (enforced by kindnet's kube-network-policies on kind
+and by kube-router on k3s). Default-deny both directions, then one allow policy per workload:
+
+  ingress controller -> gateway:8080, dashboard:8080
+  gateway            -> postgres:5432, mcp-notes:8080, mcp-utils:8080,
+                        woo-mcp pods (label app.kubernetes.io/name=woo-mcp) in ANY namespace :8080
+                        (one namespace per store, so a namespace list would go stale),
+                        the internet on 443 (LLM APIs, public upstreams; switchable),
+                        + networkPolicy.gateway.extraEgress
+  everyone           -> CoreDNS in kube-system :53
+
+The store chart's own policy is the other half of the woo-mcp isolation: it admits only pods
+labelled app.kubernetes.io/name=gateway from this namespace.
+*/ -}}
+{{- if .Values.networkPolicy.enabled }}
+{{- $np := .Values.networkPolicy }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "platform.fullname" . }}-default-deny
+  labels:
+    {{- include "platform.labels" (dict "root" . "component" "network") | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "platform.fullname" . }}-allow-dns
+  labels:
+    {{- include "platform.labels" (dict "root" . "component" "network") | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              {{- toYaml $np.dnsPodLabels | nindent 14 }}
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "platform.fullname" . }}-gateway
+  labels:
+    {{- include "platform.labels" (dict "root" . "component" "network") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "platform.selectorLabels" (dict "root" . "component" "gateway") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.ingressControllerNamespace | quote }}
+      ports:
+        - { port: 8080, protocol: TCP }
+    {{- with $np.gateway.metricsFromNamespace }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . | quote }}
+      ports:
+        - { port: 9090, protocol: TCP }
+    {{- end }}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "platform.selectorLabels" (dict "root" . "component" "postgres") | nindent 14 }}
+      ports:
+        - { port: 5432, protocol: TCP }
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "platform.selectorLabels" (dict "root" . "component" "mcp-notes") | nindent 14 }}
+        - podSelector:
+            matchLabels:
+              {{- include "platform.selectorLabels" (dict "root" . "component" "mcp-utils") | nindent 14 }}
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: woo-mcp
+      ports:
+        - { port: 8080, protocol: TCP }
+    {{- if $np.gateway.internetEgress.enabled }}
+    - to:
+        {{- range $np.gateway.internetEgress.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        {{- range $np.gateway.internetEgress.ports }}
+        - { port: {{ . }}, protocol: TCP }
+        {{- end }}
+    {{- end }}
+    {{- with $np.gateway.extraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "platform.fullname" . }}-dashboard
+  labels:
+    {{- include "platform.labels" (dict "root" . "component" "network") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "platform.selectorLabels" (dict "root" . "component" "dashboard") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.ingressControllerNamespace | quote }}
+      ports:
+        - { port: 8080, protocol: TCP }
+  egress: []    # static files only; nginx never opens outbound connections
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "platform.fullname" . }}-postgres
+  labels:
+    {{- include "platform.labels" (dict "root" . "component" "network") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "platform.selectorLabels" (dict "root" . "component" "postgres") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "platform.selectorLabels" (dict "root" $ "component" "gateway") | nindent 14 }}
+      ports:
+        - { port: 5432, protocol: TCP }
+  egress: []
+{{- range $name := list "mcp-notes" "mcp-utils" }}
+---
+# {{ $name }}: only the gateway may call it; it calls nobody.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "platform.fullname" $ }}-{{ $name }}
+  labels:
+    {{- include "platform.labels" (dict "root" $ "component" "network") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "platform.selectorLabels" (dict "root" $ "component" $name) | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "platform.selectorLabels" (dict "root" $ "component" "gateway") | nindent 14 }}
+      ports:
+        - { port: 8080, protocol: TCP }
+  egress: []
+{{- end }}
+{{- end }}

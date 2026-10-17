@@ -1,0 +1,57 @@
+# Production-ish k3s VPS. Same chart as local; only hosts, ingress class/TLS, storage, images,
+# replicas, resources and gateway.allowPrivateUpstreams differ (contracts section 14).
+host: gateway.example.com
+publicScheme: http             # becomes https automatically once ingress.tls is set
+
+ingress:
+  className: traefik           # bundled with k3s (default IngressClass)
+  annotations: {}
+  # With cert-manager installed:
+  # annotations:
+  #   cert-manager.io/cluster-issuer: letsencrypt-prod
+  # tls:
+  #   - secretName: gateway-tls
+  #     hosts: [gateway.example.com]
+  tls: []
+
+gateway:
+  image:
+    repository: registry.example.com/urumi/gateway   # pushed to a registry, or sideloaded with
+    tag: "0.1.0"                                     # deploy/scripts/k3s-load-images.sh
+    pullPolicy: IfNotPresent
+  replicas: 2                  # stateless (sessions and audit live in Postgres); rate limits are per pod
+  allowPrivateUpstreams: false # SSRF guard: upstreams must be public or *.svc.cluster.local
+  resources:
+    requests: { cpu: 250m, memory: 256Mi }
+    limits: { cpu: "2", memory: 1Gi }
+
+dashboard:
+  image:
+    repository: registry.example.com/urumi/dashboard
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  replicas: 2
+
+postgres:
+  persistence:
+    storageClass: local-path   # k3s built-in provisioner; PV pinned to the node under /var/lib/rancher/k3s/storage
+    size: 10Gi
+  resources:
+    requests: { cpu: 250m, memory: 256Mi }
+    limits: { cpu: "2", memory: 1Gi }
+
+mcpNotes:
+  image:
+    repository: registry.example.com/urumi/extra-mcp
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+
+mcpUtils:
+  image:
+    repository: registry.example.com/urumi/extra-mcp
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+
+networkPolicy:
+  enabled: true
+  ingressControllerNamespace: kube-system   # k3s runs Traefik in kube-system

@@ -1,0 +1,24 @@
+{{- /*
+ClusterIP: http://<release>-gateway.<ns>.svc.cluster.local:8080 (contracts section 2). The
+metrics port is exposed on the Service too so an in-cluster Prometheus can scrape it; no Ingress
+ever references it.
+*/ -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "platform.fullname" . }}-gateway
+  labels:
+    {{- include "platform.labels" (dict "root" . "component" "gateway") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "platform.selectorLabels" (dict "root" . "component" "gateway") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+      protocol: TCP

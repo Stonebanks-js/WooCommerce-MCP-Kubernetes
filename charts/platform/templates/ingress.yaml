@@ -1,0 +1,46 @@
+{{- /*
+One Ingress on the gateway host (contracts section 2): /api and /mcp (Prefix) go to the gateway,
+everything else (/) to the dashboard. The OAuth-discovery prefixes in ingress.extraGatewayPaths
+are also sent to the gateway so its immediate JSON 404s reach MCP clients. /metrics (:9090) is
+never referenced here. The mcp-notes / mcp-utils servers have no Ingress at all.
+Traefik streams SSE / Streamable HTTP responses without extra configuration (see values.yaml for
+the nginx annotations one would need instead).
+*/ -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "platform.fullname" . }}
+  labels:
+    {{- include "platform.labels" (dict "root" . "component" "gateway") | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.host | quote }}
+      http:
+        paths:
+          {{- range (concat (list "/api" "/mcp") .Values.ingress.extraGatewayPaths) }}
+          - path: {{ . | quote }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "platform.fullname" $ }}-gateway
+                port:
+                  name: http
+          {{- end }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "platform.fullname" . }}-dashboard
+                port:
+                  name: http

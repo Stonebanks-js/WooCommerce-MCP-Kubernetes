@@ -1,0 +1,19 @@
+{{- /*
+ClusterIP for the StatefulSet: the gateway's DATABASE_URL points at
+<release>-postgres.<ns>.svc.cluster.local:5432 (contracts section 2).
+*/ -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "platform.fullname" . }}-postgres
+  labels:
+    {{- include "platform.labels" (dict "root" . "component" "postgres") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "platform.selectorLabels" (dict "root" . "component" "postgres") | nindent 4 }}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP

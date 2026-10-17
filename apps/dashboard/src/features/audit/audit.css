@@ -1,0 +1,9 @@
+.audit-filters { display: flex; gap: var(--s1); flex-wrap: wrap; align-items: flex-end; margin-bottom: var(--s2); }
+.audit-filters label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--fg-muted); }
+.audit-filters select { width: 180px; height: 28px; font-size: 12px; }
+.audit-toolbar { display: flex; align-items: center; gap: var(--s2); justify-content: space-between; flex-wrap: wrap; margin-bottom: var(--s2); }
+.audit-footer { display: flex; align-items: center; justify-content: center; gap: var(--s2); padding: var(--s2) 0; }
+.audit-time { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.audit-user { white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: bottom; }
+.audit-error { color: var(--danger); font-size: 12px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.auto-refresh { display: inline-flex; align-items: center; gap: var(--s1); font-size: 12px; color: var(--fg-muted); }

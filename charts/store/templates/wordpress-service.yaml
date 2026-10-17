@@ -1,0 +1,19 @@
+{{- /*
+ClusterIP on :80. The Ingress, woo-mcp (WOO_BASE_URL) and the setup Job (verification request)
+all reach WordPress through this name: http://<release>-wordpress.<ns>.svc.cluster.local:80.
+*/ -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "store.fullname" . }}-wordpress
+  labels:
+    {{- include "store.labels" (dict "root" . "component" "wordpress") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "store.selectorLabels" (dict "root" . "component" "wordpress") | nindent 4 }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

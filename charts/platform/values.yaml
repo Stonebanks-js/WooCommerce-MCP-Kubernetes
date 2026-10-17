@@ -1,0 +1,180 @@
+# Default values for charts/platform: Postgres + gateway + dashboard + the "notes" and "utils"
+# upstream MCP servers. See docs/contracts.md sections 7 (gateway env), 8 (seed servers), 13, 14.
+#
+# Assignment requirements satisfied here: Helm only, same chart on kind and k3s (values-local /
+# values-prod differ only in hosts, ingress class/TLS, storage, images, replicas, resources and
+# gateway.allowPrivateUpstreams); everything in-cluster; persistent Postgres; dashboard + gateway
+# behind one Ingress with a stable URL; probes and resources on every workload; secrets only via
+# Kubernetes Secrets rendered from `required` values (deploy/secrets/platform.yaml, git-ignored).
+
+fullnameOverride: ""        # in-cluster names are <release>-<component>, e.g. platform-gateway
+
+global:
+  imageRegistry: ""         # prefix for every image, e.g. "ghcr.io/acme"
+
+# Public host of the dashboard and the gateway (/api, /mcp). PUBLIC_URL = <scheme>://<host>.
+host: gateway.127.0.0.1.nip.io
+# The first store is a separate Helm release (charts/store); its MCP server address in the seed list
+# below is derived from these two values so deploy scripts can override the release/namespace.
+store:
+  release: demo
+  namespace: store-demo
+# Scheme of PUBLIC_URL. Becomes https automatically when ingress.tls is non-empty.
+publicScheme: http
+
+ingress:
+  # Traefik both locally (installed by `make kind-up`) and on k3s (bundled). Traefik streams
+  # text/event-stream responses as they arrive, has no write timeout by default and buffers only
+  # when the Buffering middleware is attached, so MCP Streamable HTTP / chat SSE need no annotations.
+  # If you swap in ingress-nginx instead, add here:
+  #   nginx.ingress.kubernetes.io/proxy-buffering: "off"
+  #   nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+  #   nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  className: traefik
+  annotations: {}
+  # tls:
+  #   - secretName: gateway-tls
+  #     hosts: [gateway.example.com]
+  tls: []
+  # Besides /api and /mcp, these prefixes are also sent to the gateway so its immediate JSON 404s
+  # for OAuth discovery reach MCP clients (contracts section 10) instead of the dashboard's SPA
+  # fallback page. Everything else under / goes to the dashboard.
+  extraGatewayPaths: ["/.well-known", "/register", "/authorize", "/token"]
+
+gateway:
+  image:
+    repository: urumi/gateway
+    tag: dev
+    pullPolicy: IfNotPresent
+  replicas: 1
+  # ALLOW_PRIVATE_UPSTREAMS: admin-added upstream URLs may resolve to RFC1918 addresses. Off in
+  # production (SSRF guard); *.svc.cluster.local names are always allowed via the suffix list.
+  allowPrivateUpstreams: false
+  allowedInternalSuffixes: ".svc.cluster.local,.svc"
+  llm:
+    provider: none          # anthropic | openai_compatible | mock | none
+    model: claude-opus-5-5
+    baseUrl: ""             # openai_compatible only, e.g. http://ollama:11434/v1
+    effort: ""              # anthropic only: low | medium | high
+  # Seeded upstream servers (contracts section 8). Inserted only when the slug does not exist yet,
+  # so admin edits survive restarts. `url` is rendered with `tpl`, so it may reference the release
+  # (the notes/utils entries follow the release name; the woo entry follows store.release/store.namespace).
+  # Do not override individual list entries with --set: Helm replaces the whole entry, use store.* instead.
+  seedServers:
+    - slug: woo
+      name: "WooCommerce (demo store)"
+      url: "http://{{ .Values.store.release }}-woo-mcp.{{ .Values.store.namespace }}.svc.cluster.local:8080/mcp"
+      authType: bearer
+      authSecretEnv: WOO_MCP_TOKEN
+      timeoutMs: 30000
+    - slug: notes
+      name: "Team notes"
+      url: 'http://{{ include "platform.fullname" . }}-mcp-notes.{{ .Release.Namespace }}.svc.cluster.local:8080/mcp'
+      authType: bearer
+      authSecretEnv: NOTES_MCP_TOKEN
+    - slug: utils
+      name: "Utilities"
+      url: 'http://{{ include "platform.fullname" . }}-mcp-utils.{{ .Release.Namespace }}.svc.cluster.local:8080/mcp'
+      authType: header
+      authHeaderName: X-Api-Key
+      authSecretEnv: UTILS_MCP_TOKEN
+  logLevel: info
+  # Any other non-secret variable from contracts section 7 (strings), e.g.
+  #   RATE_LIMIT_PER_MINUTE: "120"
+  #   CHAT_MAX_ITERATIONS: "8"
+  extraEnv: {}
+  resources:
+    requests: { cpu: 100m, memory: 192Mi }
+    limits: { cpu: "1", memory: 512Mi }
+
+dashboard:
+  image:
+    repository: urumi/dashboard
+    tag: dev
+    pullPolicy: IfNotPresent
+  replicas: 1
+  resources:
+    requests: { cpu: 25m, memory: 32Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+
+postgres:
+  image:
+    repository: postgres
+    tag: 17-alpine
+    pullPolicy: IfNotPresent
+  database: gateway
+  user: gateway
+  persistence:
+    size: 2Gi
+    storageClass: ""        # "" = cluster default (standard on kind, local-path on k3s)
+    accessModes: [ReadWriteOnce]
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: "1", memory: 512Mi }
+  # The *-alpine postgres images create the postgres user as uid/gid 70 (the Debian variants use
+  # 999). initdb refuses to run as a uid that is not in /etc/passwd, so this must match the image.
+  securityContext:
+    runAsUser: 70
+    runAsGroup: 70
+    fsGroup: 70
+
+mcpNotes:
+  enabled: true
+  image:
+    repository: urumi/extra-mcp
+    tag: dev
+    pullPolicy: IfNotPresent
+  replicas: 1
+  logLevel: info
+  resources:
+    requests: { cpu: 25m, memory: 64Mi }
+    limits: { cpu: 300m, memory: 192Mi }
+
+mcpUtils:
+  enabled: true
+  image:
+    repository: urumi/extra-mcp
+    tag: dev
+    pullPolicy: IfNotPresent
+  replicas: 1
+  logLevel: info
+  resources:
+    requests: { cpu: 25m, memory: 64Mi }
+    limits: { cpu: 300m, memory: 192Mi }
+
+# From deploy/secrets/platform.yaml (generated once by `make secrets`, never committed). The
+# templates use `required` for everything the gateway cannot start without; the optional ones
+# (demo member, LLM keys) may stay empty, the gateway treats "" as unset.
+secrets:
+  adminEmail: admin@example.com
+  adminPassword: ""         # required, >= 8 chars
+  demoMemberEmail: member@example.com
+  demoMemberPassword: ""    # optional: bootstraps "user B" for the demo
+  encryptionKey: ""         # required: base64 of 32 random bytes (GATEWAY_ENCRYPTION_KEY)
+  sessionSecret: ""         # required
+  postgresPassword: ""      # required; URL-safe characters only (it is embedded in DATABASE_URL)
+  anthropicApiKey: ""       # optional, LLM_PROVIDER=anthropic
+  llmApiKey: ""             # optional, LLM_PROVIDER=openai_compatible
+  wooMcpToken: ""           # required; must equal the store chart's secrets.mcpAuthToken
+  notesMcpToken: ""         # required when mcpNotes.enabled
+  utilsMcpToken: ""         # required when mcpUtils.enabled
+
+networkPolicy:
+  enabled: true
+  # Namespace of the ingress controller (kubernetes.io/metadata.name): "traefik" on the local kind
+  # cluster, "kube-system" on k3s.
+  ingressControllerNamespace: traefik
+  dnsPodLabels:
+    k8s-app: kube-dns
+  gateway:
+    # Egress to the internet on these ports: LLM APIs (Anthropic / OpenAI-compatible) and any
+    # public upstream MCP server an admin registers. Disable for an air-gapped cluster.
+    internetEgress:
+      enabled: true
+      cidrs: ["0.0.0.0/0"]
+      ports: [443]
+    # Extra raw egress rules (NetworkPolicyEgressRule objects) appended verbatim, e.g. to reach an
+    # upstream MCP server on another port or namespace.
+    extraEgress: []
+    # Namespace allowed to scrape /metrics on :9090 (e.g. "monitoring"). Empty = nobody.
+    metricsFromNamespace: ""

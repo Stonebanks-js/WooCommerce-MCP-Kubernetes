@@ -1,0 +1,20 @@
+{{- /*
+Headless-less ClusterIP: WordPress and the setup Job connect by Service name
+(<release>-mariadb:3306, contracts section 2). A StatefulSet needs a serviceName; a plain ClusterIP
+is enough for a single replica and keeps the address stable across pod restarts.
+*/ -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "store.fullname" . }}-mariadb
+  labels:
+    {{- include "store.labels" (dict "root" . "component" "mariadb") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "store.selectorLabels" (dict "root" . "component" "mariadb") | nindent 4 }}
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: mysql
+      protocol: TCP

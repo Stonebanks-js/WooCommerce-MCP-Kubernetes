@@ -1,0 +1,16 @@
+{{- /*
+The must-use plugin (files/urumi-platform.php) is shipped as a ConfigMap and mounted with subPath
+into the WordPress PVC at wp-content/mu-plugins/urumi-platform.php. A nested subPath mount inside
+the /var/www/html PVC mount is fine: kubelet creates the mount point file inside the volume.
+Keeping the PHP in a separate file (not inline YAML) keeps the template readable and lets the same
+file be mounted into the setup Job so wp-cli sees exactly what Apache sees.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "store.fullname" . }}-wordpress-mu-plugin
+  labels:
+    {{- include "store.labels" (dict "root" . "component" "wordpress") | nindent 4 }}
+data:
+  urumi-platform.php: |-
+    {{- .Files.Get "files/urumi-platform.php" | nindent 4 }}

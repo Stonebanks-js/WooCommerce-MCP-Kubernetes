@@ -1,0 +1,20 @@
+{{- /*
+Requirement: "persistent storage for WordPress content". /var/www/html (core, wp-config.php,
+plugins, uploads) lives on this claim; the setup Job mounts the same claim, which is why WordPress
+runs as a single-replica Deployment with a ReadWriteOnce volume rather than a StatefulSet.
+*/ -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "store.fullname" . }}-wordpress
+  labels:
+    {{- include "store.labels" (dict "root" . "component" "wordpress") | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.wordpress.persistence.accessModes | nindent 4 }}
+  {{- with .Values.wordpress.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.wordpress.persistence.size }}

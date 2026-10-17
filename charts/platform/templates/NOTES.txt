@@ -1,0 +1,15 @@
+MCP gateway platform (release {{ .Release.Name }}, namespace {{ .Release.Namespace }})
+
+Dashboard:   {{ include "platform.publicUrl" . }}/
+MCP endpoint: {{ include "platform.publicUrl" . }}/mcp   (Authorization: Bearer <gw_key> or X-Api-Key: <gw_key>)
+REST API:    {{ include "platform.publicUrl" . }}/api
+Admin login: {{ .Values.secrets.adminEmail }} (password: secrets.adminPassword)
+{{- if .Values.secrets.demoMemberPassword }}
+Demo member: {{ .Values.secrets.demoMemberEmail }} (password: secrets.demoMemberPassword)
+{{- end }}
+
+Seeded upstream servers: {{ range $i, $s := .Values.gateway.seedServers }}{{ if $i }}, {{ end }}{{ $s.slug }}{{ end }}
+Metrics: http://{{ include "platform.fullname" . }}-gateway.{{ .Release.Namespace }}.svc.cluster.local:9090/metrics (cluster-internal only)
+
+  kubectl -n {{ .Release.Namespace }} get pods
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "platform.fullname" . }}-gateway

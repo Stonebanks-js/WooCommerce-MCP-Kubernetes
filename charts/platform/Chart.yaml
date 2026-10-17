@@ -1,0 +1,10 @@
+apiVersion: v2
+name: platform
+description: >-
+  The MCP gateway platform: Postgres + gateway (REST API, MCP endpoint, chat agent) + dashboard +
+  the two extra upstream MCP servers (notes, utils). Deployable on kind and k3s with values changes only.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.29.0-0"
+keywords: [mcp, gateway]

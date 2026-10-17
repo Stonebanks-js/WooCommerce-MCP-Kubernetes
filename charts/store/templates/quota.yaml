@@ -1,0 +1,36 @@
+{{- /*
+Optional per-namespace caps for provisioned stores (one namespace per tenant): a ResourceQuota
+bounds the namespace total and a LimitRange gives any container without explicit resources sane
+defaults (so the quota can never be bypassed by omitting them). Off in values.yaml, on in
+values-prod.yaml.
+*/ -}}
+{{- if .Values.quota.enabled }}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ include "store.fullname" . }}-quota
+  labels:
+    {{- include "store.labels" (dict "root" . "component" "quota") | nindent 4 }}
+spec:
+  hard:
+    requests.cpu: {{ .Values.quota.requests.cpu | quote }}
+    requests.memory: {{ .Values.quota.requests.memory | quote }}
+    limits.cpu: {{ .Values.quota.limits.cpu | quote }}
+    limits.memory: {{ .Values.quota.limits.memory | quote }}
+    pods: {{ .Values.quota.pods | quote }}
+    persistentvolumeclaims: {{ .Values.quota.persistentVolumeClaims | quote }}
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: {{ include "store.fullname" . }}-limits
+  labels:
+    {{- include "store.labels" (dict "root" . "component" "quota") | nindent 4 }}
+spec:
+  limits:
+    - type: Container
+      defaultRequest:
+        {{- toYaml .Values.quota.limitRange.defaultRequest | nindent 8 }}
+      default:
+        {{- toYaml .Values.quota.limitRange.default | nindent 8 }}
+{{- end }}

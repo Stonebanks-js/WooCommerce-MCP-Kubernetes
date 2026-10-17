@@ -1,0 +1,13 @@
+{{- /*
+"notes" upstream MCP server (bearer auth, in-memory store). Deployment + ClusterIP Service +
+Secret come from the shared "platform.mcpServer" template in _helpers.tpl; the token is
+`required` when the server is enabled.
+*/ -}}
+{{- if .Values.mcpNotes.enabled }}
+{{- include "platform.mcpServer" (dict
+      "root" .
+      "name" "mcp-notes"
+      "server" "notes"
+      "values" .Values.mcpNotes
+      "token" (required "set secrets.notesMcpToken (deploy/secrets/platform.yaml)" .Values.secrets.notesMcpToken)) }}
+{{- end }}

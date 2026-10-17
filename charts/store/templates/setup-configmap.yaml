@@ -1,0 +1,19 @@
+{{- /*
+Scripts for the setup Job, kept as real files under files/ (readable, shell-checkable, no Go
+template escaping inside shell/PHP). Mounted read-only at /scripts in the wp-cli container.
+This is a regular release resource (not a hook) so it exists before the post-install hook runs and
+stays around for `kubectl get cm` inspection.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "store.fullname" . }}-setup-scripts
+  labels:
+    {{- include "store.labels" (dict "root" . "component" "setup") | nindent 4 }}
+data:
+  setup.sh: |-
+    {{- .Files.Get "files/setup.sh" | nindent 4 }}
+  app-password.php: |-
+    {{- .Files.Get "files/app-password.php" | nindent 4 }}
+  verify.php: |-
+    {{- .Files.Get "files/verify.php" | nindent 4 }}

@@ -1,0 +1,142 @@
+{{- /*
+Setup Job: a Helm post-install / post-upgrade hook that installs WordPress + WooCommerce and the
+mcp-bot application password (files/setup.sh). Hook annotations:
+  * hook-delete-policy before-hook-creation: the finished Job (and its logs) stay until the next
+    run, so `kubectl -n store-demo logs job/<release>-setup` works for the demo; the old Job is
+    removed right before a new one is created, which also sidesteps the immutable-spec problem.
+  * hook-output-log-policy hook-failed: Helm 4 streams the pod log into the CLI when the hook
+    fails; Helm 3 ignores the annotation.
+With `helm ... --wait` the hook runs only after the WordPress Deployment is Ready, so the script
+never races the Deployment's own entrypoint for the empty PVC.
+*/ -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "store.fullname" . }}-setup
+  labels:
+    {{- include "store.labels" (dict "root" . "component" "setup") | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation
+    helm.sh/hook-output-log-policy: hook-failed
+spec:
+  backoffLimit: {{ .Values.setup.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.setup.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "store.labels" (dict "root" . "component" "setup") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      # fsGroup 33 = www-data: the shared PVC must be writable by the wp-cli container (uid 33).
+      # No pod-level runAsUser: the init container below must start as root (image default).
+      securityContext:
+        fsGroup: 33
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # Makes the Job deterministic regardless of whether the WordPress pod has already populated
+        # the volume: docker-ensure-installed.sh (shipped in the apache image) copies WordPress +
+        # .htaccess into the PVC if missing and writes wp-config.php from the WORDPRESS_* env, then
+        # exits 0. It must run as root (same documented exception as the WordPress Deployment).
+        - name: ensure-installed
+          image: {{ include "store.image" (dict "image" .Values.wordpress.image "registry" .Values.global.imageRegistry) }}
+          imagePullPolicy: {{ .Values.wordpress.image.pullPolicy }}
+          command: ["docker-ensure-installed.sh"]
+          env:
+            {{- include "store.wordpressEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.setup.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN", "FOWNER", "DAC_OVERRIDE"]   # untar WordPress with www-data ownership
+          volumeMounts:
+            - name: wordpress-data
+              mountPath: /var/www/html
+      containers:
+        - name: wp-cli
+          image: {{ include "store.image" (dict "image" .Values.setup.image "registry" .Values.global.imageRegistry) }}
+          imagePullPolicy: {{ .Values.setup.image.pullPolicy }}
+          command: ["sh", "/scripts/setup.sh"]
+          env:
+            {{- include "store.wordpressEnv" . | nindent 12 }}
+            # The cli image's default user is Alpine uid 82; we run as Debian www-data (33) to match
+            # the file ownership on the PVC. That uid has no home, so point wp-cli at /tmp.
+            - name: HOME
+              value: /tmp
+            - name: WP_CLI_CACHE_DIR
+              value: /tmp/wp-cli-cache
+            - name: WP_URL
+              value: {{ include "store.publicUrl" . | quote }}
+            - name: WP_HOSTNAME
+              value: {{ .Values.store.host | quote }}
+            - name: WP_TITLE
+              value: {{ .Values.store.name | quote }}
+            - name: WP_ADMIN_USER
+              value: {{ .Values.store.adminUser | quote }}
+            - name: WP_ADMIN_EMAIL
+              value: {{ .Values.store.adminEmail | quote }}
+            - name: WP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "store.fullname" . }}-wordpress
+                  key: admin-password
+            - name: WC_VERSION
+              value: {{ .Values.setup.woocommerceVersion | quote }}
+            - name: WC_COUNTRY
+              value: {{ .Values.store.country | quote }}
+            - name: WC_CURRENCY
+              value: {{ .Values.store.currency | quote }}
+            - name: SAMPLE_ENABLED
+              value: {{ .Values.store.sampleProduct.enabled | quote }}
+            - name: SAMPLE_NAME
+              value: {{ .Values.store.sampleProduct.name | quote }}
+            - name: SAMPLE_PRICE
+              value: {{ .Values.store.sampleProduct.price | quote }}
+            - name: WOO_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "store.fullname" . }}-woo-mcp
+                  key: WOO_APP_PASSWORD
+            - name: VERIFY_URL
+              value: {{ include "store.wordpressInternalUrl" . }}/wp-json/wc/v3/products?per_page=1
+          resources:
+            {{- toYaml .Values.setup.resources | nindent 12 }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 33
+            runAsGroup: 33
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: wordpress-data
+              mountPath: /var/www/html
+            # Same mu-plugin as the Deployment, so wp-cli loads the identical WordPress.
+            - name: mu-plugin
+              mountPath: /var/www/html/wp-content/mu-plugins/urumi-platform.php
+              subPath: urumi-platform.php
+              readOnly: true
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: wordpress-data
+          persistentVolumeClaim:
+            claimName: {{ include "store.fullname" . }}-wordpress
+        - name: mu-plugin
+          configMap:
+            name: {{ include "store.fullname" . }}-wordpress-mu-plugin
+        - name: scripts
+          configMap:
+            name: {{ include "store.fullname" . }}-setup-scripts
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: {}

@@ -1,0 +1,16 @@
+{{- /* ClusterIP: http://<release>-dashboard.<ns>.svc.cluster.local:8080, fronted by the Ingress. */ -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "platform.fullname" . }}-dashboard
+  labels:
+    {{- include "platform.labels" (dict "root" . "component" "dashboard") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "platform.selectorLabels" (dict "root" . "component" "dashboard") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP

@@ -1,0 +1,37 @@
+{{- /*
+Non-secret gateway configuration (contracts section 7), consumed with envFrom. Secrets live in
+secrets.yaml. SEED_SERVERS_JSON is rendered from .Values.gateway.seedServers; each `url` goes
+through `tpl` so the default entries can follow the release name/namespace.
+*/ -}}
+{{- $seeds := list }}
+{{- range .Values.gateway.seedServers }}
+{{- $entry := deepCopy . }}
+{{- $_ := set $entry "url" (tpl .url $) }}
+{{- $seeds = append $seeds $entry }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "platform.fullname" . }}-gateway-config
+  labels:
+    {{- include "platform.labels" (dict "root" . "component" "gateway") | nindent 4 }}
+data:
+  PORT: "8080"
+  METRICS_PORT: "9090"
+  PUBLIC_URL: {{ include "platform.publicUrl" . | quote }}
+  ADMIN_EMAIL: {{ .Values.secrets.adminEmail | quote }}
+  DEMO_MEMBER_EMAIL: {{ .Values.secrets.demoMemberEmail | default "" | quote }}
+  SEED_SERVERS_JSON: {{ toJson $seeds | quote }}
+  LLM_PROVIDER: {{ .Values.gateway.llm.provider | quote }}
+  LLM_MODEL: {{ .Values.gateway.llm.model | quote }}
+  LLM_BASE_URL: {{ .Values.gateway.llm.baseUrl | default "" | quote }}
+  LLM_EFFORT: {{ .Values.gateway.llm.effort | default "" | quote }}
+  ALLOW_PRIVATE_UPSTREAMS: {{ .Values.gateway.allowPrivateUpstreams | quote }}
+  ALLOWED_INTERNAL_SUFFIXES: {{ .Values.gateway.allowedInternalSuffixes | quote }}
+  # The session cookie is marked Secure only when the public URL is https (behind TLS).
+  COOKIE_SECURE: {{ eq (include "platform.scheme" .) "https" | quote }}
+  TRUST_PROXY: "true"   # X-Forwarded-* from the ingress controller are trusted
+  LOG_LEVEL: {{ .Values.gateway.logLevel | quote }}
+  {{- range $k, $v := .Values.gateway.extraEnv }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}

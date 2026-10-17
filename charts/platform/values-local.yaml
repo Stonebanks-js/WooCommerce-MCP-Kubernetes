@@ -1,0 +1,47 @@
+# Local kind cluster (make local-up). Overrides only hosts, ingress class, storage, images,
+# replicas, resources and gateway.allowPrivateUpstreams (contracts section 14).
+host: gateway.127.0.0.1.nip.io
+publicScheme: http
+
+ingress:
+  className: traefik           # installed into namespace "traefik" by deploy/scripts/kind-up.sh
+  annotations: {}
+  tls: []
+
+gateway:
+  image:
+    repository: urumi/gateway
+    tag: dev                   # built by `make build`, sideloaded by `make load`
+    pullPolicy: IfNotPresent
+  replicas: 1
+  allowPrivateUpstreams: true  # lets an admin register e.g. http://10.x.x.x:... upstreams while developing
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: "1", memory: 512Mi }
+
+dashboard:
+  image:
+    repository: urumi/dashboard
+    tag: dev
+    pullPolicy: IfNotPresent
+
+postgres:
+  persistence:
+    storageClass: standard     # kind default (rancher local-path); data is lost with `kind delete cluster`
+    size: 1Gi
+
+mcpNotes:
+  image:
+    repository: urumi/extra-mcp
+    tag: dev
+    pullPolicy: IfNotPresent
+
+mcpUtils:
+  image:
+    repository: urumi/extra-mcp
+    tag: dev
+    pullPolicy: IfNotPresent
+
+networkPolicy:
+  enabled: true
+  ingressControllerNamespace: traefik

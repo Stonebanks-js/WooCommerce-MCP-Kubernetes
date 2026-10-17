@@ -1,0 +1,11 @@
+node_modules
+dist
+test
+coverage
+*.log
+.env
+.env.*
+*.tsbuildinfo
+README.md
+Dockerfile
+.dockerignore

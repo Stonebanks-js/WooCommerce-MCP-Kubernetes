@@ -1,0 +1,13 @@
+.status-error {
+  margin-top: 2px; font-size: 12px; line-height: 16px; color: var(--danger);
+  max-width: 320px; overflow-wrap: anywhere;
+}
+.server-slug { font-family: var(--mono); font-size: 12px; color: var(--fg-muted); }
+.policy-patterns { font-family: var(--mono); font-size: 12px; }
+.tools-count { font-variant-numeric: tabular-nums; }
+.tool-desc { color: var(--fg-muted); font-size: 12px; line-height: 16px; max-width: 460px; }
+.tool-title { font-weight: 500; }
+.save-result { display: flex; flex-direction: column; gap: var(--s1); }
+.save-result .row { gap: 12px; }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); }
+@media (max-width: 900px) { .detail-grid { grid-template-columns: 1fr; } }

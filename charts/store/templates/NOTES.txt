@@ -1,0 +1,18 @@
+{{ .Values.store.name }} (release {{ .Release.Name }}, namespace {{ .Release.Namespace }})
+
+Storefront:     {{ include "store.publicUrl" . }}/
+WordPress admin: {{ include "store.publicUrl" . }}/wp-admin/   (user: {{ .Values.store.adminUser }}, password: secrets.adminPassword)
+WooCommerce MCP: http://{{ include "store.fullname" . }}-woo-mcp.{{ .Release.Namespace }}.svc.cluster.local:8080/mcp
+                 (cluster-internal only; bearer = secrets.mcpAuthToken; reachable solely from
+                 gateway pods in namespace "{{ .Values.gateway.namespace }}")
+
+The setup Job ({{ include "store.fullname" . }}-setup) runs as a post-install/post-upgrade hook:
+it installs WordPress + WooCommerce {{ .Values.setup.woocommerceVersion }}, enables Cash on Delivery,
+creates the mcp-bot shop manager and installs its application password, then verifies the REST API.
+
+  kubectl -n {{ .Release.Namespace }} get pods
+  kubectl -n {{ .Release.Namespace }} logs job/{{ include "store.fullname" . }}-setup
+{{- if not .Values.networkPolicy.enabled }}
+
+WARNING: networkPolicy.enabled=false, woo-mcp is reachable by any pod in the cluster.
+{{- end }}

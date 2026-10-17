@@ -1,0 +1,124 @@
+/* Urumi MCP Gateway dashboard: light, dense operations console. 8px spacing grid, one accent. */
+:root {
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  --s1: 8px; --s2: 16px; --s3: 24px; --s4: 32px; --s5: 40px; --s6: 48px;
+
+  --fg: #1a1d23;
+  --fg-muted: #5f6672;
+  --fg-subtle: #8b919c;
+  --bg: #ffffff;
+  --bg-muted: #f6f7f9;
+  --bg-hover: #eef0f3;
+  --border: #e3e6ea;
+  --border-strong: #c9cfd6;
+
+  --accent: #2456d6;
+  --accent-strong: #1b45b0;
+  --accent-soft: #e8eefc;
+
+  --success: #15803d; --success-bg: #dcfce7; --success-dot: #22c55e;
+  --danger: #b91c1c;  --danger-bg: #fee2e2;  --danger-dot: #ef4444;
+  --warning: #92400e; --warning-bg: #fef3c7;
+  --info: #1e40af;    --info-bg: #dbeafe;
+  --neutral: #4b5563; --neutral-bg: #eef0f3; --neutral-dot: #9ca3af;
+
+  --radius: 6px;
+  --radius-lg: 10px;
+  --shadow-md: 0 8px 24px rgba(16, 24, 40, 0.12);
+  --focus: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--fg);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+body.modal-open { overflow: hidden; }
+a { color: var(--accent); }
+a:hover { color: var(--accent-strong); }
+h1, h2, h3 { margin: 0; font-weight: 600; line-height: 1.3; }
+h2 { font-size: 15px; }
+h3 { font-size: 13px; }
+p { margin: 0 0 var(--s1); }
+code, pre, .mono { font-family: var(--mono); font-size: 12px; }
+pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+b, strong { font-weight: 600; }
+
+/* Utilities */
+.muted { color: var(--fg-muted); }
+.subtle { color: var(--fg-subtle); }
+.small { font-size: 12px; line-height: 16px; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.stack { display: flex; flex-direction: column; gap: var(--s2); }
+.stack-tight { display: flex; flex-direction: column; gap: var(--s1); }
+.row { display: flex; align-items: center; gap: var(--s1); flex-wrap: wrap; }
+.row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--s1); flex-wrap: wrap; }
+.grow { flex: 1; min-width: 0; }
+.break { overflow-wrap: anywhere; }
+.screen-center { min-height: 100vh; display: grid; place-items: center; }
+
+.card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--s2); }
+.card-title { font-size: 13px; font-weight: 600; margin-bottom: var(--s1); }
+.section { margin-top: var(--s3); }
+.section-title { font-size: 13px; font-weight: 600; margin-bottom: var(--s1); display: flex; align-items: center; gap: var(--s1); }
+
+/* Key/value metadata grid */
+.kv { display: grid; grid-template-columns: 160px 1fr; gap: 4px var(--s2); margin: 0; }
+.kv dt { color: var(--fg-muted); font-size: 12px; line-height: 20px; }
+.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+
+/* Chips (tool annotation hints, policy patterns) */
+.chip {
+  display: inline-block; padding: 0 6px; border-radius: 4px; font-size: 11px; line-height: 18px;
+  border: 1px solid var(--border); background: var(--bg-muted); color: var(--fg-muted); white-space: nowrap;
+}
+.chip-danger { border-color: #fecaca; background: var(--danger-bg); color: var(--danger); }
+.chip-ok { border-color: #bbf7d0; background: var(--success-bg); color: var(--success); }
+.chips { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+
+/* Forms */
+input, select, textarea {
+  font: inherit; color: inherit;
+  width: 100%; height: 32px; padding: 0 var(--s1);
+  border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg);
+}
+textarea { height: auto; min-height: 80px; padding: 6px var(--s1); line-height: 20px; resize: vertical; }
+select { padding-right: 24px; }
+input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
+  outline: none; border-color: var(--accent); box-shadow: var(--focus);
+}
+input:disabled, select:disabled, textarea:disabled { background: var(--bg-muted); color: var(--fg-muted); }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field-label { font-size: 12px; font-weight: 500; color: var(--fg-muted); }
+.field-hint { font-size: 12px; color: var(--fg-subtle); }
+.field-error { font-size: 12px; color: var(--danger); }
+.field.has-error input, .field.has-error textarea, .field.has-error select { border-color: var(--danger); }
+.field-inline { flex-direction: row; align-items: center; gap: var(--s1); }
+.field-inline .field-label { order: 2; color: var(--fg); }
+.field-inline .field-control { order: 1; display: flex; }
+.field-inline .field-hint { order: 3; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); }
+.form-grid .span-2 { grid-column: span 2; }
+.error-note {
+  padding: var(--s1) 12px; border-radius: var(--radius); font-size: 12px; line-height: 18px;
+  background: var(--danger-bg); color: var(--danger); border: 1px solid #fecaca; overflow-wrap: anywhere;
+}
+.notice {
+  padding: var(--s1) 12px; border-radius: var(--radius); font-size: 12px; line-height: 18px;
+  background: var(--warning-bg); color: var(--warning); border: 1px solid #fde68a;
+}
+.notice-info { background: var(--info-bg); color: var(--info); border-color: #bfdbfe; }
+.code-block {
+  display: block; padding: var(--s1) 12px; border-radius: var(--radius); background: var(--bg-muted);
+  border: 1px solid var(--border); font-family: var(--mono); font-size: 12px; line-height: 18px;
+  white-space: pre-wrap; word-break: break-all; user-select: all;
+}
