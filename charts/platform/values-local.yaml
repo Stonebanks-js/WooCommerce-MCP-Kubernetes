@@ -20,7 +20,7 @@ gateway:
   # Nemotron. Switch to provider: anthropic (+ anthropicApiKey) or provider: mock (no key) as needed.
   llm:
     provider: openai_compatible
-    model: nvidia/nemotron-3-super-120b-a12b   # nemotron-3-ultra-550b-a55b also works when NVIDIA is not overloaded (503)
+    model: nvidia/nemotron-3-ultra-550b-a55b   # fallbacks that also tool-call on a free key: openai/gpt-oss-20b, nvidia/nemotron-3.5-lightning-30b-a3b, z-ai/glm-5.3-flash
     baseUrl: https://integrate.api.nvidia.com/v1
   resources:
     requests: { cpu: 50m, memory: 128Mi }
